@@ -1,27 +1,27 @@
 """
-engine/meme.py — MEME RADAR: σάρωση νέων tokens on-chain και βαθμολόγηση.
+engine/meme.py — MEME RADAR: scans new on-chain tokens and scores them.
 
-Τι ΜΠΟΡΕΙ να κάνει: να βρει tokens που εμφανίστηκαν τις τελευταίες ώρες/μέρες
-(DexScreener) και να τα κατατάξει με βάση μετρήσιμα κριτήρια "δικτύου":
-ρευστότητα, όγκο, αγορές vs πωλήσεις, ηλικία, socials, boosts, security flags.
+What it CAN do: find tokens that appeared in the last hours/days
+(DexScreener) and rank them on measurable "network" criteria:
+liquidity, volume, buys vs sells, age, socials, boosts, security flags.
 
-Τι ΔΕΝ μπορεί: να προβλέψει ποιο θα κάνει x100. Το score λέει "αυτό το token
-έχει πραγματική δραστηριότητα και λιγότερα red flags", όχι "θα ανέβει".
-Στα meme coins η πλειονότητα πάει στο μηδέν· το εργαλείο φιλτράρει σκουπίδια.
+What it CANNOT do: predict which one will do a 100x. The score says "this token
+has real activity and fewer red flags", not "it will go up".
+Most meme coins go to zero; the tool filters out the junk.
 
 Score (0-100):
   liquidity   0-20   ≥$250k → 20, $50k → 10, <$10k → 0
-  volume/liq  0-15   υγιές 0.5–5× (πολύ υψηλό = wash trading)
+  volume/liq  0-15   healthy 0.5–5× (very high = wash trading)
   buy ratio   0-20   buys/(buys+sells) 1h & 24h
-  momentum    0-15   %5m/%1h/%6h/%24h — θετικό αλλά όχι παραβολικό
-  age         0-10   6h–7d ιδανικό (πολύ νέο = ρίσκο, πολύ παλιό = "χάθηκε")
+  momentum    0-15   %1h/%6h/%24h — positive but not parabolic
+  age         0-10   6h–7d ideal (too new = risky, too old = "faded")
   network     0-10   website + ≥2 socials + boosts
-  security    -40..0 honeypot = απόρριψη, mintable/tax → ποινή
+  security    -40..0 honeypot = reject, mintable/tax → penalty
 
 Upgrade path:
-  - Πρόσθεσε holder distribution (Helius για Solana, Moralis για EVM).
-  - Κράτα ιστορικό των scores σε SQLite και μέτρα το forward return 24h/72h
-    ανά bucket score → έτσι αποδεικνύεις (ή διαψεύδεις) ότι το score έχει edge.
+  - Add holder distribution (Helius for Solana, Moralis for EVM).
+  - Store score history in SQLite and measure the 24h/72h forward return per
+    score bucket → this proves (or disproves) that the score has an edge.
 """
 from __future__ import annotations
 
@@ -48,7 +48,7 @@ def _age_hours(pair: dict) -> float | None:
 
 
 def score_pair(pair: dict, sec: dict | None = None) -> dict:
-    """Βαθμολογεί ένα DexScreener pair. Επιστρέφει dict με score + breakdown."""
+    """Scores one DexScreener pair. Returns a dict with score + breakdown."""
     liq = _num((pair.get("liquidity") or {}).get("usd"))
     vol24 = _num((pair.get("volume") or {}).get("h24"))
     vol1 = _num((pair.get("volume") or {}).get("h1"))
@@ -70,43 +70,43 @@ def score_pair(pair: dict, sec: dict | None = None) -> dict:
     elif liq >= 100_000: s_liq = 15
     elif liq >= 50_000: s_liq = 10
     elif liq >= 10_000: s_liq = 4
-    else: s_liq = 0; flags.append("ρευστότητα < $10k")
+    else: s_liq = 0; flags.append("liquidity < $10k")
     # volume/liquidity
     ratio = vol24 / liq if liq > 0 else 0
     if 0.5 <= ratio <= 5: s_vl = 15
     elif 5 < ratio <= 15: s_vl = 8
-    elif ratio > 15: s_vl = 2; flags.append("όγκος/ρευστότητα > 15× (πιθανό wash trading)")
+    elif ratio > 15: s_vl = 2; flags.append("volume/liquidity > 15× (possible wash trading)")
     else: s_vl = 3
     # buy pressure
     br1 = b1 / (b1 + s1) if (b1 + s1) > 0 else 0.5
     br24 = b24 / (b24 + s24) if (b24 + s24) > 0 else 0.5
     s_buy = round(10 * min(1, max(0, (br1 - 0.4) / 0.4)) + 10 * min(1, max(0, (br24 - 0.4) / 0.4)))
     if (b24 + s24) < 50:
-        s_buy = min(s_buy, 5); flags.append("λιγότερα από 50 txns/24h")
+        s_buy = min(s_buy, 5); flags.append("fewer than 50 txns/24h")
     # momentum
     s_mom = 0
     for chg, w in ((c1, 5), (c6, 5), (c24, 5)):
         if 0 < chg <= 150: s_mom += w
-        elif chg > 150: s_mom += 1; flags.append(f"παραβολική κίνηση {chg:+.0f}%")
+        elif chg > 150: s_mom += 1; flags.append(f"parabolic move {chg:+.0f}%")
         elif -30 <= chg <= 0: s_mom += 2
     # age
     if age is None: s_age = 3
     elif 6 <= age <= 168: s_age = 10
-    elif 1 <= age < 6: s_age = 6; flags.append("ηλικία < 6 ωρών")
-    elif age < 1: s_age = 2; flags.append("ηλικία < 1 ώρας — εξαιρετικά ρίσκο")
+    elif 1 <= age < 6: s_age = 6; flags.append("age < 6 hours")
+    elif age < 1: s_age = 2; flags.append("age < 1 hour — extremely risky")
     elif age <= 720: s_age = 6
     else: s_age = 2
     # network
     s_net = min(10, 3 * n_web + 2 * min(n_soc, 3) + (1 if boosts > 0 else 0))
-    if n_soc == 0 and n_web == 0: flags.append("χωρίς website/socials")
+    if n_soc == 0 and n_web == 0: flags.append("no website/socials")
     # security
     s_sec = 0
     sec = sec or {}
     if sec.get("honeypot"):
-        s_sec = -100; flags.append("HONEYPOT — ΑΠΟΡΡΙΨΗ")
+        s_sec = -100; flags.append("HONEYPOT — REJECTED")
     else:
         if sec.get("mintable"): s_sec -= 15; flags.append("mintable supply")
-        if sec.get("owner_can_change_tax"): s_sec -= 10; flags.append("owner αλλάζει tax")
+        if sec.get("owner_can_change_tax"): s_sec -= 10; flags.append("owner can change tax")
         st = max(_num(sec.get("buy_tax")), _num(sec.get("sell_tax")))
         if st > 10: s_sec -= 15; flags.append(f"tax {st:.0f}%")
         for r in sec.get("risks") or []:
@@ -135,8 +135,8 @@ def score_pair(pair: dict, sec: dict | None = None) -> dict:
 def scan(max_tokens: int = 60, chains: tuple[str, ...] = ("solana", "base", "ethereum", "bsc"),
          with_security: bool = True, min_liq: float = 5_000) -> pd.DataFrame:
     """
-    Πλήρης σάρωση: υποψήφια → pairs → security → score. Επιστρέφει DataFrame
-    ταξινομημένο κατά score. Χρόνος: ~10-40s ανάλογα με το with_security.
+    Full scan: candidates → pairs → security → score. Returns a DataFrame
+    sorted by score. Runtime: ~10-40s depending on with_security.
     """
     cands = D.fetch_dex_candidates()
     by_chain: dict[str, list[str]] = {}
@@ -147,7 +147,7 @@ def scan(max_tokens: int = 60, chains: tuple[str, ...] = ("solana", "base", "eth
     rows = []
     for ch, addrs in by_chain.items():
         pairs = D.fetch_dex_pairs(ch, addrs[:max_tokens])
-        # κρατάμε το pair με τη μεγαλύτερη ρευστότητα ανά token
+        # keep the pair with the deepest liquidity per token
         best: dict[str, dict] = {}
         for p in pairs:
             a = (p.get("baseToken") or {}).get("address")
@@ -167,7 +167,7 @@ def scan(max_tokens: int = 60, chains: tuple[str, ...] = ("solana", "base", "eth
 
 
 def lookup(query: str) -> pd.DataFrame:
-    """Έρευνα συγκεκριμένου token με όνομα/σύμβολο/διεύθυνση (εντολή MEME <x>)."""
+    """Look up a specific token by name/symbol/address (MEME <x> command)."""
     pairs = D.dex_search(query)
     rows = []
     for p in pairs[:15]:

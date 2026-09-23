@@ -1,27 +1,27 @@
 """
-FLOW TERMINAL — το terminal που σου λέει πού κοιτάει το κεφάλαιο.
+FLOW TERMINAL — the terminal that shows you where capital is looking.
 
-Εκκίνηση (Windows):  python -m streamlit run app.py
+Launch (Windows):  python -m streamlit run app.py   (or double-click run.bat)
 
-Δομή:
-  engine/data.py      πηγές δεδομένων (yfinance, CoinGecko, DexScreener, security APIs)
-  engine/rotation.py  ροή κεφαλαίου (relative strength + flow proxy + trend)
-  engine/signals.py   setups LONG/SHORT/WAIT με entry/stop/target
-  engine/meme.py      radar νέων meme tokens με score δικτύου/ρίσκου
-  engine/narrative.py "με απλά λόγια" + προαιρετικό LLM (ASK)
-  ui/theme.py         εμφάνιση terminal
-  ui/components.py    κάρτες, υδρόγειος, chart, tape
+Structure:
+  engine/data.py      data sources (yfinance, CoinGecko, DexScreener, security APIs)
+  engine/rotation.py  capital rotation (relative strength + flow proxy + trend)
+  engine/signals.py   LONG/SHORT/WAIT setups with entry/stop/target
+  engine/meme.py      radar for new meme tokens with a network/risk score
+  engine/narrative.py "in plain words" summaries + optional LLM (ASK)
+  ui/theme.py         terminal look & feel
+  ui/components.py    cards, globe, chart, ticker tape
 
-Εντολές (command bar, όπως Bloomberg):
-  GIP <asset>   chart + setup          π.χ. GIP GOLD, GIP NVDA, GIP BTC
-  DES <asset>   περιγραφή/fundamentals  π.χ. DES US30
-  SET <asset>   setup με επίπεδα         π.χ. SET OIL
-  VER <asset>   "verdict" με απλά λόγια  π.χ. VER DAX
-  MEME <x>      έρευνα token             π.χ. MEME WIF ή MEME <contract>
-  ASK <ερώτηση> ερώτηση στον αναλυτή     π.χ. ASK τι αγοράζω σήμερα;
-  BRIEF · GLOBE · COMM · STOCKS · CRYPTO · SETUPS · FX · RADAR   → module
+Commands (command bar, Bloomberg-style):
+  GIP <asset>    chart + setup             e.g. GIP GOLD, GIP NVDA, GIP BTC
+  DES <asset>    description/fundamentals  e.g. DES US30
+  SET <asset>    setup with levels         e.g. SET OIL
+  VER <asset>    plain-words verdict       e.g. VER DAX
+  MEME <x>       token lookup              e.g. MEME WIF or MEME <contract>
+  ASK <question> ask the analyst           e.g. ASK what should I watch today?
+  BRIEF · GLOBE · COMM · STOCKS · CRYPTO · SETUPS · FX · RADAR   → jump to module
 
-Ενημερωτικοί σκοποί μόνο — δεν συνδέεται με broker, δεν εκτελεί εντολές.
+Informational purposes only — not connected to any broker, places no orders.
 """
 from __future__ import annotations
 
@@ -44,15 +44,16 @@ st.set_page_config(page_title="FLOW TERMINAL", page_icon="🌐", layout="wide",
 theme.inject()
 
 MODULES = ["BRIEF", "CHART", "GLOBE", "SETUPS", "STOCKS", "COMM", "CRYPTO", "RADAR", "FX", "ASK"]
-MODULE_LABELS = {"BRIEF": "1 ΠΡΩΙΝΟ", "CHART": "2 CHART", "GLOBE": "3 ΥΔΡΟΓΕΙΟΣ", "SETUPS": "4 SETUPS",
-                 "STOCKS": "5 ΕΤΑΙΡΕΙΕΣ", "COMM": "6 ΕΜΠΟΡΕΥΜΑΤΑ", "CRYPTO": "7 CRYPTO",
+MODULE_LABELS = {"BRIEF": "1 BRIEF", "CHART": "2 CHART", "GLOBE": "3 GLOBE", "SETUPS": "4 SETUPS",
+                 "STOCKS": "5 STOCKS", "COMM": "6 COMMODITIES", "CRYPTO": "7 CRYPTO",
                  "RADAR": "8 MEME RADAR", "FX": "9 FX & RATES", "ASK": "ASK"}
 NAMES = {a.ticker: a.name for a in D.all_assets()}
 NAMES.update({"BTC-USD": "BITCOIN", "ETH-USD": "ETHEREUM", "SOL-USD": "SOLANA"})
+PLAIN = "IN PLAIN WORDS"
 
 
 # --------------------------------------------------------------------------- #
-# Cache layer — TTL σε δευτερόλεπτα. Μικρότερο = πιο "live", περισσότερα requests.
+# Cache layer — TTL in seconds. Lower = more "live", but more requests.
 # --------------------------------------------------------------------------- #
 @st.cache_data(ttl=300, show_spinner=False)
 def load_daily(tickers: tuple[str, ...]) -> pd.DataFrame:
@@ -80,11 +81,13 @@ def load_info(ticker: str) -> dict:
 
 
 def metrics_for(assets: list[D.Asset]) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Downloads history for a list of assets and computes rotation metrics."""
     hist = load_daily(tuple(a.ticker for a in assets))
     return R.asset_metrics(D.closes(hist), D.volumes(hist)), hist
 
 
 def spark_rows(assets: list[D.Asset], m: pd.DataFrame, hist: pd.DataFrame, fmt: str = "{:,.2f}") -> list[dict]:
+    """Builds the row dicts that the sparkline card grid expects."""
     rows = []
     for a in assets:
         if a.ticker not in m.index:
@@ -99,14 +102,14 @@ def spark_rows(assets: list[D.Asset], m: pd.DataFrame, hist: pd.DataFrame, fmt: 
 
 
 # --------------------------------------------------------------------------- #
-# Κεφαλίδα + command bar
+# Header + command bar
 # --------------------------------------------------------------------------- #
 def clocks() -> str:
     z = {"ATH": "Europe/Athens", "LDN": "Europe/London", "NY": "America/New_York", "TYO": "Asia/Tokyo"}
     return " · ".join(f"{k} {datetime.now(ZoneInfo(v)):%H:%M}" for k, v in z.items())
 
 
-C.head("🌐 FLOW TERMINAL", "το terminal που σου λέει πού κοιτάει το κεφάλαιο — ενημερωτικά, όχι συμβουλή",
+C.head("🌐 FLOW TERMINAL", "the terminal that shows you where capital is looking — informational, not advice",
        clocks())
 
 if "module" not in st.session_state:
@@ -116,7 +119,7 @@ if "cmd_target" not in st.session_state:
 if "ask_q" not in st.session_state:
     st.session_state.ask_q = ""
 
-cmd = st.text_input("ΕΝΤΟΛΗ", placeholder="π.χ. GIP GOLD · DES US30 · SET OIL · VER DAX · MEME WIF · ASK τι αγοράζω;",
+cmd = st.text_input("COMMAND", placeholder="e.g. GIP GOLD · DES US30 · SET OIL · VER DAX · MEME WIF · ASK what should I watch?",
                     label_visibility="collapsed", key="cmd")
 if cmd:
     parts = cmd.strip().split(maxsplit=1)
@@ -130,8 +133,6 @@ if cmd:
         st.session_state.module, st.session_state.ask_q = "ASK", arg
     elif verb in MODULES:
         st.session_state.module = verb
-    elif verb in ("ΠΡΩΙΝΟ", "BRIEF"):
-        st.session_state.module = "BRIEF"
 
 sel = st.pills("MODULES", MODULES, default=st.session_state.module, label_visibility="collapsed",
                format_func=lambda m: MODULE_LABELS[m], key="pills")
@@ -140,13 +141,13 @@ if sel and sel != st.session_state.module:
     st.session_state.cmd_target = None
 mod = st.session_state.module
 
-C.chips([("CORE", ""), ("ΥΔΡΟΓΕΙΟΣ", ""), ("SMART MONEY", ""), ("ROTATION", ""), ("SETUPS", ""),
+C.chips([("CORE", ""), ("GLOBE", ""), ("SMART MONEY", ""), ("ROTATION", ""), ("SETUPS", ""),
          ("COMM", ""), ("CRYPTO", ""), ("MEME RADAR", ""), ("SECURITY", ""), ("FX", ""), ("ASK", "gold")],
-        active={"GLOBE": "ΥΔΡΟΓΕΙΟΣ", "RADAR": "MEME RADAR", "SETUPS": "SETUPS", "COMM": "COMM",
+        active={"GLOBE": "GLOBE", "RADAR": "MEME RADAR", "SETUPS": "SETUPS", "COMM": "COMM",
                 "CRYPTO": "CRYPTO", "ASK": "ASK"}.get(mod, "CORE"))
 
-# tape (indices + FX + BTC) — φορτώνεται μία φορά
-with st.spinner("σύνδεση με αγορές…"):
+# ticker tape (indices + FX + BTC) — loaded once per cache window
+with st.spinner("connecting to markets…"):
     tape_assets = D.MACRO + [D.Asset("BTC-USD", "BITCOIN", "BTC", "CRYPTO", "crypto")]
     tm, th = metrics_for(tape_assets)
 C.tape([(a.short, float(tm.loc[a.ticker, "last"]), float(tm.loc[a.ticker, "ret_1d"]))
@@ -157,8 +158,8 @@ C.tape([(a.short, float(tm.loc[a.ticker, "last"]), float(tm.loc[a.ticker, "ret_1
 # MODULES
 # =========================================================================== #
 def mod_brief():
-    st.markdown("### ΠΡΩΙΝΟ BRIEF — τι έγινε, πού πάει το χρήμα, τι να κοιτάξεις")
-    with st.spinner("υπολογισμός ροής κεφαλαίου…"):
+    st.markdown("### MORNING BRIEF — what happened, where the money is going, what to watch")
+    with st.spinner("computing capital flows…"):
         mc, hc = metrics_for(D.ASSET_CLASSES + D.SECTORS)
         mr, _ = metrics_for(D.REGIONS)
         mcom, hcom = metrics_for(D.COMMODITIES)
@@ -168,37 +169,37 @@ def mod_brief():
     regions = R.group_rotation(mr, {a.ticker: a.name for a in D.REGIONS})
 
     c1, c2, c3 = st.columns(3)
-    C.rotation_block(c1, classes, "ΚΛΑΣΕΙΣ ΕΝΕΡΓΗΤΙΚΟΥ — ροή", "rb_classes")
-    C.rotation_block(c2, sectors, "ΚΛΑΔΟΙ S&P — ροή", "rb_sectors")
-    C.rotation_block(c3, regions, "ΚΕΝΤΡΑ ΑΓΟΡΑΣ — ροή", "rb_regions")
+    C.rotation_block(c1, classes, "ASSET CLASSES — flow", "rb_classes")
+    C.rotation_block(c2, sectors, "S&P SECTORS — flow", "rb_sectors")
+    C.rotation_block(c3, regions, "MARKET CENTRES — flow", "rb_regions")
 
-    C.panel("ΜΕ ΑΠΛΑ ΛΟΓΙΑ — ΚΛΑΣΕΙΣ", N.rotation_text(R.rotation_story(classes), R.breadth(mc), "κλάσεις"))
-    C.panel("ΜΕ ΑΠΛΑ ΛΟΓΙΑ — ΚΕΝΤΡΑ", N.rotation_text(R.rotation_story(regions), R.breadth(mr), "κέντρα"), "violet")
-    C.panel("ΕΜΠΟΡΕΥΜΑΤΑ", N.commodities_text(mcom, NAMES))
+    C.panel(f"{PLAIN} — ASSET CLASSES", N.rotation_text(R.rotation_story(classes), R.breadth(mc), "classes"))
+    C.panel(f"{PLAIN} — MARKET CENTRES", N.rotation_text(R.rotation_story(regions), R.breadth(mr), "centres"), "violet")
+    C.panel("COMMODITIES", N.commodities_text(mcom, NAMES))
     C.panel("CRYPTO", N.crypto_text(cg, glob), "violet")
 
-    st.markdown("#### ΤΑ 3 ΠΙΟ ΚΑΘΑΡΑ SETUPS ΤΗΣ ΗΜΕΡΑΣ")
+    st.markdown("#### THE 3 CLEANEST SETUPS OF THE DAY")
     all_m = pd.concat([mc, mcom])
     hist_all = pd.concat([hc, hcom], axis=1)
     setups = [s for s in S.build_setups(hist_all, list(all_m.index), all_m) if s.direction != "WAIT"][:3]
     if not setups:
-        st.info("Καμία καθαρή θέση σήμερα — WAIT σε όλα.")
+        st.info("No clean position today — WAIT on everything.")
     for s in setups:
         C.panel(f"{s.direction} {NAMES.get(s.ticker, s.ticker)} · conviction {s.conviction}/100",
-                f"είσοδος ~{s.entry:,.2f} · stop {s.stop:,.2f} · target {s.target:,.2f} · "
+                f"entry ~{s.entry:,.2f} · stop {s.stop:,.2f} · target {s.target:,.2f} · "
                 f"ATR {s.atr_pct:.1f}% · RSI {s.rsi:.0f} · {'; '.join(s.rationale)}",
                 "gold" if s.direction == "LONG" else "violet")
     if trend:
-        st.markdown("#### TRENDING ΣΤΟ COINGECKO (τι ψάχνει ο κόσμος τώρα)")
+        st.markdown("#### TRENDING ON COINGECKO (what people are searching for right now)")
         C.chips([(f"{t['symbol']} #{t['rank'] or '—'}", "") for t in trend[:10]])
 
 
 def mod_globe():
-    st.markdown("### ΥΔΡΟΓΕΙΟΣ ΡΟΗΣ ΚΕΦΑΛΑΙΟΥ — σύρε για περιστροφή")
-    with st.spinner("φόρτωση κέντρων αγοράς…"):
+    st.markdown("### CAPITAL FLOW GLOBE — drag to rotate")
+    with st.spinner("loading market centres…"):
         mr, hr = metrics_for(D.REGIONS)
     if mr.empty:
-        st.warning("Δεν ήρθαν δεδομένα από yfinance. Ξαναδοκίμασε σε λίγο.")
+        st.warning("No data came back from yfinance. Try again in a moment.")
         return
     cen = mr.copy()
     meta = {a.ticker: a for a in D.REGIONS}
@@ -207,12 +208,12 @@ def mod_globe():
     cen["lon"] = [meta[t].lon for t in cen.index]
     st.plotly_chart(C.globe(cen), width="stretch", config={"displayModeBar": False}, key="globe")
     story = R.rotation_story(R.group_rotation(mr, {a.ticker: a.name for a in D.REGIONS}))
-    C.panel("ΜΕ ΑΠΛΑ ΛΟΓΙΑ", N.rotation_text(story, R.breadth(mr), "κέντρα"))
+    C.panel(PLAIN, N.rotation_text(story, R.breadth(mr), "centres"))
     show = cen[["name", "last", "ret_1d", "ret_5d", "ret_20d", "rs_score", "flow_score", "score", "regime"]].round(2)
-    show.columns = ["ΚΕΝΤΡΟ", "ETF", "1d %", "5d %", "20d %", "RS", "FLOW", "SCORE", "ΚΑΤΑΣΤΑΣΗ"]
+    show.columns = ["CENTRE", "ETF", "1d %", "5d %", "20d %", "RS", "FLOW", "SCORE", "STATUS"]
     st.dataframe(show, width="stretch", height=420)
-    st.markdown('<div class="ft-muted">Κάθε κέντρο = ETF της αγοράς σε USD. FLOW = proxy από dollar volume '
-                '(δεν υπάρχει δωρεάν API πραγματικών εισροών).</div>', unsafe_allow_html=True)
+    st.markdown('<div class="ft-muted">Each centre = that market\'s country ETF in USD. FLOW = proxy from dollar volume '
+                '(there is no free API for actual fund flows).</div>', unsafe_allow_html=True)
 
 
 def mod_chart():
@@ -220,11 +221,11 @@ def mod_chart():
     verb, ticker = tgt
     name = NAMES.get(ticker, ticker)
     st.markdown(f"### {verb} · {name} ({ticker})")
-    with st.spinner(f"φόρτωση {ticker}…"):
+    with st.spinner(f"loading {ticker}…"):
         hist = load_daily((ticker,))
         universe_m, _ = metrics_for(D.COMMODITIES + D.ASSET_CLASSES + D.MACRO + D.STOCKS)
     if hist.empty or ticker not in hist.columns.get_level_values(0):
-        st.error(f"Δεν βρέθηκε το «{ticker}». Δοκίμασε GOLD, OIL, US30, DAX, NVDA, BTC ή raw yfinance ticker.")
+        st.error(f"Could not find “{ticker}”. Try GOLD, OIL, US30, DAX, NVDA, BTC or a raw yfinance ticker.")
         return
     ohlc = hist[ticker].dropna(subset=["Close"])
     m = R.asset_metrics(D.closes(hist), D.volumes(hist)).loc[ticker]
@@ -233,17 +234,17 @@ def mod_chart():
     st.plotly_chart(C.price_chart(ohlc.tail(120), name, setup), width="stretch", key="pricechart")
     if setup:
         k = st.columns(6)
-        k[0].metric("ΘΕΣΗ", setup.direction)
+        k[0].metric("POSITION", setup.direction)
         k[1].metric("CONVICTION", f"{setup.conviction}/100")
-        k[2].metric("ΕΙΣΟΔΟΣ", f"{setup.entry:,.2f}")
+        k[2].metric("ENTRY", f"{setup.entry:,.2f}")
         k[3].metric("STOP", f"{setup.stop:,.2f}")
         k[4].metric("TARGET", f"{setup.target:,.2f}")
         k[5].metric("RSI / ATR%", f"{setup.rsi:.0f} / {setup.atr_pct:.1f}")
-    C.panel("ΜΕ ΑΠΛΑ ΛΟΓΙΑ", N.asset_text(ticker, name, m, setup))
+    C.panel(PLAIN, N.asset_text(ticker, name, m, setup))
     if verb == "DES":
         info = load_info(ticker)
         if info:
-            st.markdown("#### ΠΕΡΙΓΡΑΦΗ")
+            st.markdown("#### DESCRIPTION")
             cols = st.columns(4)
             for i, (k, lbl) in enumerate([("marketCap", "Market cap"), ("trailingPE", "P/E"),
                                           ("dividendYield", "Div. yield"), ("beta", "Beta")]):
@@ -254,35 +255,38 @@ def mod_chart():
 
 
 def mod_setups():
-    st.markdown("### SETUPS — LONG / SHORT / WAIT σε όλο το σύμπαν")
-    scope = st.radio("ΣΥΜΠΑΝ", ["Όλα", "Εμπορεύματα", "Μετοχές", "Δείκτες & FX", "Κλάδοι"], horizontal=True,
+    st.markdown("### SETUPS — LONG / SHORT / WAIT across the whole universe")
+    scope = st.radio("UNIVERSE", ["All", "Commodities", "Stocks", "Indices & FX", "Sectors"], horizontal=True,
                      label_visibility="collapsed")
-    uni = {"Όλα": D.COMMODITIES + D.STOCKS + D.MACRO + D.SECTORS, "Εμπορεύματα": D.COMMODITIES,
-           "Μετοχές": D.STOCKS, "Δείκτες & FX": D.MACRO, "Κλάδοι": D.SECTORS}[scope]
-    with st.spinner("υπολογισμός setups…"):
+    uni = {"All": D.COMMODITIES + D.STOCKS + D.MACRO + D.SECTORS, "Commodities": D.COMMODITIES,
+           "Stocks": D.STOCKS, "Indices & FX": D.MACRO, "Sectors": D.SECTORS}[scope]
+    with st.spinner("computing setups…"):
         m, h = metrics_for(uni)
         setups = S.build_setups(h, list(m.index), m)
     if not setups:
-        st.warning("Χωρίς δεδομένα.")
+        st.warning("No data.")
         return
     df = pd.DataFrame([s.as_dict() for s in setups])
-    df.insert(1, "ΟΝΟΜΑ", df["ticker"].map(NAMES).fillna(df["ticker"]))
+    df.insert(1, "NAME", df["ticker"].map(NAMES).fillna(df["ticker"]))
     df["rationale"] = df["rationale"].apply(lambda r: " | ".join(r))
-    show = df[["ΟΝΟΜΑ", "ticker", "direction", "conviction", "entry", "stop", "target", "rsi", "atr_pct", "trend", "rationale"]]
-    show.columns = ["ΟΝΟΜΑ", "TICKER", "ΘΕΣΗ", "CONV", "ΕΙΣΟΔΟΣ", "STOP", "TARGET", "RSI", "ATR%", "ΤΑΣΗ", "ΓΙΑΤΙ"]
+    show = df[["NAME", "ticker", "direction", "conviction", "entry", "stop", "target", "rsi", "atr_pct", "trend", "rationale"]]
+    show.columns = ["NAME", "TICKER", "POSITION", "CONV", "ENTRY", "STOP", "TARGET", "RSI", "ATR%", "TREND", "WHY"]
     st.dataframe(show, width="stretch", height=560, hide_index=True)
-    n_l = (df.direction == "LONG").sum(); n_s = (df.direction == "SHORT").sum(); n_w = (df.direction == "WAIT").sum()
-    C.panel("ΜΕ ΑΠΛΑ ΛΟΓΙΑ", f"{n_l} LONG, {n_s} SHORT, {n_w} WAIT. Stop = 2×ATR, target = 3×ATR (R:R 1.5). "
-            f"Conviction > 60 σημαίνει ότι τάση, ορμή, όγκος και ροή κεφαλαίου συμφωνούν. "
-            f"Το WAIT είναι θέση: δεν υπάρχει edge, μην κυνηγάς.")
+    n_l = (df.direction == "LONG").sum()
+    n_s = (df.direction == "SHORT").sum()
+    n_w = (df.direction == "WAIT").sum()
+    C.panel(PLAIN, f"{n_l} LONG, {n_s} SHORT, {n_w} WAIT. Stop = 2×ATR, target = 3×ATR (R:R 1.5). "
+            f"Conviction > 60 means trend, momentum, volume and capital flow all agree. "
+            f"WAIT is a position too: there is no edge, don't chase.")
 
 
 def mod_grid(assets: list[D.Asset], title: str, key: str, cols: int = 5):
+    """Generic sparkline-card module, grouped by Asset.group."""
     st.markdown(f"### {title}")
-    with st.spinner("φόρτωση…"):
+    with st.spinner("loading…"):
         m, h = metrics_for(assets)
     if m.empty:
-        st.warning("Χωρίς δεδομένα από yfinance.")
+        st.warning("No data from yfinance.")
         return m, h
     for grp in dict.fromkeys(a.group for a in assets):
         sub = [a for a in assets if a.group == grp and a.ticker in m.index]
@@ -294,33 +298,33 @@ def mod_grid(assets: list[D.Asset], title: str, key: str, cols: int = 5):
 
 
 def mod_comm():
-    m, _ = mod_grid(D.COMMODITIES, "ΕΜΠΟΡΕΥΜΑΤΑ — 20 assets", "comm")
+    m, _ = mod_grid(D.COMMODITIES, "COMMODITIES — 20 assets", "comm")
     if not m.empty:
-        C.panel("ΜΕ ΑΠΛΑ ΛΟΓΙΑ", N.commodities_text(m, NAMES))
-        C.rotation_block(st, m[["score"]].rename(index=NAMES), "ΡΟΗ ΑΝΑ ΕΜΠΟΡΕΥΜΑ", "rb_comm")
+        C.panel(PLAIN, N.commodities_text(m, NAMES))
+        C.rotation_block(st, m[["score"]].rename(index=NAMES), "FLOW BY COMMODITY", "rb_comm")
 
 
 def mod_stocks():
-    extra = st.text_input("ΠΡΟΣΘΕΣΕ TICKERS (κόμμα)", placeholder="π.χ. AMD, NFLX, OTE.AT, SIE.DE", key="extra_stocks")
+    extra = st.text_input("ADD TICKERS (comma-separated)", placeholder="e.g. AMD, NFLX, OTE.AT, SIE.DE", key="extra_stocks")
     assets = list(D.STOCKS)
     for t in [x.strip().upper() for x in extra.split(",") if x.strip()]:
-        assets.append(D.Asset(t, t, t, "ΔΙΚΕΣ ΣΟΥ", "equity"))
-    m, h = mod_grid(assets, "ΕΤΑΙΡΕΙΕΣ — watchlist", "stk", cols=4)
+        assets.append(D.Asset(t, t, t, "YOUR TICKERS", "equity"))
+    m, h = mod_grid(assets, "STOCKS — watchlist", "stk", cols=4)
     if not m.empty:
         setups = S.build_setups(h, list(m.index), m)
         top = [s for s in setups if s.direction != "WAIT"][:5]
-        C.panel("ΜΕ ΑΠΛΑ ΛΟΓΙΑ", "Ισχυρότερα setups: " + ("; ".join(
-            f"{s.direction} {s.ticker} ({s.conviction})" for s in top) if top else "κανένα — WAIT") +
-            f". Εισροή: {', '.join(m[m.regime == 'INFLOW'].index[:5]) or '—'}. "
-            f"Εκροή: {', '.join(m[m.regime == 'OUTFLOW'].index[:5]) or '—'}.")
+        C.panel(PLAIN, "Strongest setups: " + ("; ".join(
+            f"{s.direction} {s.ticker} ({s.conviction})" for s in top) if top else "none — WAIT") +
+            f". Inflow: {', '.join(m[m.regime == 'INFLOW'].index[:5]) or '—'}. "
+            f"Outflow: {', '.join(m[m.regime == 'OUTFLOW'].index[:5]) or '—'}.")
 
 
 def mod_crypto():
-    st.markdown("### CRYPTO — top-100 κατά κεφαλαιοποίηση")
+    st.markdown("### CRYPTO — top 100 by market cap")
     with st.spinner("CoinGecko…"):
         cg, glob, trend = load_crypto()
     if cg.empty:
-        st.warning("Το CoinGecko επέστρεψε κενό (rate limit). Περίμενε 60'' και πάτα R (rerun).")
+        st.warning("CoinGecko returned nothing (rate limit). Wait 60 seconds and press R to rerun.")
         return
     k = st.columns(4)
     k[0].metric("TOTAL MCAP", f"${(glob.get('total_mcap_usd') or 0)/1e12:.2f}T", f"{glob.get('mcap_chg_24h') or 0:+.2f}% 24h")
@@ -331,36 +335,36 @@ def mod_crypto():
              "chg": r.chg_24h or 0, "series": r.spark[-56:],
              "fmt": "{:,.4f}" if r.current_price < 1 else "{:,.2f}"} for r in cg.head(30).itertuples()]
     C.card_grid(rows, cols=5, key_prefix="cg")
-    C.panel("ΜΕ ΑΠΛΑ ΛΟΓΙΑ", N.crypto_text(cg, glob), "violet")
-    # rotation μέσα στα crypto: 7d vs 30d z-scores
+    C.panel(PLAIN, N.crypto_text(cg, glob), "violet")
+    # rotation inside crypto: 7d return z-score (60%) + volume/mcap z-score (40%)
     tbl = cg[["symbol", "name", "current_price", "chg_1h", "chg_24h", "chg_7d", "chg_30d", "market_cap", "total_volume"]].copy()
     tbl["vol/mcap"] = (tbl.total_volume / tbl.market_cap).round(3)
     tbl["FLOW"] = ((tbl.chg_7d.fillna(0) - tbl.chg_7d.fillna(0).mean()) / (tbl.chg_7d.std() or 1) * 0.6 +
                    (tbl["vol/mcap"] - tbl["vol/mcap"].mean()) / (tbl["vol/mcap"].std() or 1) * 0.4).round(2)
-    st.markdown("#### ΡΟΗ ΜΕΣΑ ΣΤΑ CRYPTO (θετικό = προτίμηση κεφαλαίου vs το σύνολο)")
+    st.markdown("#### FLOW WITHIN CRYPTO (positive = capital prefers it vs the rest)")
     st.dataframe(tbl.sort_values("FLOW", ascending=False).round(2), width="stretch", height=420, hide_index=True)
 
 
 def mod_radar():
-    st.markdown("### MEME RADAR — νέα tokens on-chain, βαθμολογημένα κατά δίκτυο & ρίσκο")
-    st.markdown('<div class="ft-muted">Πηγή: DexScreener (νέα profiles + boosts) · security: RugCheck (Solana) & GoPlus (EVM). '
-                'Το score μετρά δραστηριότητα και red flags — ΟΧΙ μελλοντική απόδοση.</div>', unsafe_allow_html=True)
+    st.markdown("### MEME RADAR — new on-chain tokens, scored by network & risk")
+    st.markdown('<div class="ft-muted">Source: DexScreener (new profiles + boosts) · security: RugCheck (Solana) & GoPlus (EVM). '
+                'The score measures activity and red flags — NOT future returns.</div>', unsafe_allow_html=True)
     tgt = st.session_state.cmd_target
     if tgt and tgt[0] == "MEME" and tgt[1]:
-        st.markdown(f"#### ΕΡΕΥΝΑ: {tgt[1]}")
-        with st.spinner("αναζήτηση on-chain…"):
+        st.markdown(f"#### LOOKUP: {tgt[1]}")
+        with st.spinner("searching on-chain…"):
             df = M.lookup(tgt[1])
     else:
         c1, c2 = st.columns([1, 3])
-        sec = c1.toggle("Έλεγχος security (πιο αργό, +20s)", value=True)
-        if c2.button("↻ ΝΕΑ ΣΑΡΩΣΗ"):
+        sec = c1.toggle("Security check (slower, +20s)", value=True)
+        if c2.button("↻ NEW SCAN"):
             load_meme.clear()
-        with st.spinner("σάρωση νέων tokens σε Solana / Base / Ethereum / BSC…"):
+        with st.spinner("scanning new tokens on Solana / Base / Ethereum / BSC…"):
             df = load_meme(sec)
     if df.empty:
-        st.info("Κανένα token δεν πέρασε τα φίλτρα (ή το DexScreener δεν απάντησε). Δοκίμασε ξανά σε 1'.")
+        st.info("No token passed the filters (or DexScreener did not respond). Try again in 1 minute.")
         return
-    C.panel("ΜΕ ΑΠΛΑ ΛΟΓΙΑ", N.meme_text(df), "violet")
+    C.panel(PLAIN, N.meme_text(df), "violet")
     show = df[["grade", "score", "symbol", "chain", "price", "liq", "vol24", "mcap", "age_h",
                "buy_ratio_1h", "chg_1h", "chg_24h", "socials", "boosts", "security_source", "flags", "url"]].copy()
     show["flags"] = show["flags"].apply(lambda f: " | ".join(f) if f else "—")
@@ -372,55 +376,56 @@ def mod_radar():
                                 "LIQ $": st.column_config.NumberColumn(format="%.0f"),
                                 "VOL24 $": st.column_config.NumberColumn(format="%.0f"),
                                 "MCAP $": st.column_config.NumberColumn(format="%.0f")})
-    with st.expander("Πώς βγαίνει το score"):
+    with st.expander("How the score is built"):
         st.write(pd.DataFrame(df["breakdown"].tolist(), index=df["symbol"]).head(15))
 
 
 def mod_fx():
-    m, _ = mod_grid(D.MACRO, "FX, ΔΕΙΚΤΕΣ & ΕΠΙΤΟΚΙΑ", "fx", cols=4)
+    m, _ = mod_grid(D.MACRO, "FX, INDICES & RATES", "fx", cols=4)
     if not m.empty:
         dxy = m.loc["DX-Y.NYB"] if "DX-Y.NYB" in m.index else None
         vix = m.loc["^VIX"] if "^VIX" in m.index else None
         txt = ""
         if dxy is not None:
-            txt += (f"Δολάριο (DXY) {dxy['last']:.2f}, {N.fmt_pct(dxy['ret_5d'])} 5d → "
-                    f"{'πίεση σε εμπορεύματα/EM' if dxy['ret_5d'] > 0.5 else 'ούριος άνεμος για εμπορεύματα/EM' if dxy['ret_5d'] < -0.5 else 'ουδέτερο'}. ")
+            txt += (f"US dollar (DXY) {dxy['last']:.2f}, {N.fmt_pct(dxy['ret_5d'])} 5d → "
+                    f"{'pressure on commodities/EM' if dxy['ret_5d'] > 0.5 else 'tailwind for commodities/EM' if dxy['ret_5d'] < -0.5 else 'neutral'}. ")
         if vix is not None:
             v = vix["last"]
-            txt += f"VIX {v:.1f} → {'ήρεμη αγορά, risk-on' if v < 15 else 'κανονικό' if v < 22 else 'φόβος, risk-off' if v < 30 else 'πανικός'}. "
-        C.panel("ΜΕ ΑΠΛΑ ΛΟΓΙΑ", txt or "—")
+            txt += f"VIX {v:.1f} → {'calm market, risk-on' if v < 15 else 'normal' if v < 22 else 'fear, risk-off' if v < 30 else 'panic'}. "
+        C.panel(PLAIN, txt or "—")
 
 
 def mod_ask():
-    st.markdown("### ASK — ρώτα τον αναλυτή του terminal")
-    q = st.text_area("ΕΡΩΤΗΣΗ", value=st.session_state.ask_q, placeholder="π.χ. Πού πάει το κεφάλαιο αυτή την εβδομάδα και τι setup έχει το ασήμι;",
+    st.markdown("### ASK — ask the terminal's analyst")
+    q = st.text_area("QUESTION", value=st.session_state.ask_q,
+                     placeholder="e.g. Where is capital flowing this week, and what is the setup on silver?",
                      height=90, label_visibility="collapsed")
-    if st.button("ΡΩΤΑ") and q.strip():
-        with st.spinner("συλλογή snapshot αγοράς…"):
+    if st.button("ASK") and q.strip():
+        with st.spinner("collecting market snapshot…"):
             mc, hc = metrics_for(D.ASSET_CLASSES + D.SECTORS + D.COMMODITIES + D.MACRO)
             mr, _ = metrics_for(D.REGIONS)
             cg, glob, _ = load_crypto()
             setups = [s.as_dict() for s in S.build_setups(hc, list(mc.index), mc)[:12]]
             snap = {
-                "ημερομηνία": datetime.now(ZoneInfo("Europe/Athens")).isoformat(timespec="minutes"),
-                "ροή_κλάσεων": R.group_rotation(mc, {a.ticker: a.name for a in D.ASSET_CLASSES}).to_dict("index"),
-                "ροή_κλάδων": R.group_rotation(mc, {a.ticker: a.name for a in D.SECTORS}).to_dict("index"),
-                "ροή_κέντρων": R.group_rotation(mr, {a.ticker: a.name for a in D.REGIONS}).to_dict("index"),
-                "εμπορεύματα": mc.loc[[t for t in mc.index if t.endswith("=F")], ["last", "ret_1d", "ret_5d", "ret_20d", "score", "regime"]].round(2).to_dict("index"),
+                "timestamp": datetime.now(ZoneInfo("Europe/Athens")).isoformat(timespec="minutes"),
+                "asset_class_flow": R.group_rotation(mc, {a.ticker: a.name for a in D.ASSET_CLASSES}).to_dict("index"),
+                "sector_flow": R.group_rotation(mc, {a.ticker: a.name for a in D.SECTORS}).to_dict("index"),
+                "market_centre_flow": R.group_rotation(mr, {a.ticker: a.name for a in D.REGIONS}).to_dict("index"),
+                "commodities": mc.loc[[t for t in mc.index if t.endswith("=F")], ["last", "ret_1d", "ret_5d", "ret_20d", "score", "regime"]].round(2).to_dict("index"),
                 "top_setups": setups,
                 "crypto_global": glob,
                 "crypto_top10": cg.head(10)[["symbol", "current_price", "chg_24h", "chg_7d"]].round(2).to_dict("records") if not cg.empty else [],
             }
-        rule = N.rotation_text(R.rotation_story(R.group_rotation(mc, {a.ticker: a.name for a in D.ASSET_CLASSES})), R.breadth(mc), "κλάσεις")
-        C.panel("ΚΑΝΟΝΕΣ TERMINAL", rule)
-        with st.spinner("ο αναλυτής σκέφτεται…"):
+        rule = N.rotation_text(R.rotation_story(R.group_rotation(mc, {a.ticker: a.name for a in D.ASSET_CLASSES})), R.breadth(mc), "classes")
+        C.panel("TERMINAL RULES", rule)
+        with st.spinner("the analyst is thinking…"):
             ans = N.ask_llm(q, snap)
-        C.panel("ΑΝΑΛΥΤΗΣ", ans, "violet")
+        C.panel("ANALYST", ans, "violet")
 
 
 # --------------------------------------------------------------------------- #
 {"BRIEF": mod_brief, "CHART": mod_chart, "GLOBE": mod_globe, "SETUPS": mod_setups, "STOCKS": mod_stocks,
  "COMM": mod_comm, "CRYPTO": mod_crypto, "RADAR": mod_radar, "FX": mod_fx, "ASK": mod_ask}[mod]()
 
-st.markdown(f'<hr><div class="ft-muted">⚠ {N.DISCLAIMER} Δεδομένα: yfinance (US μετοχές ~15\' καθυστέρηση), '
-            f'CoinGecko, DexScreener. Δεν συνδέεται με broker.</div>', unsafe_allow_html=True)
+st.markdown(f'<hr><div class="ft-muted">⚠ {N.DISCLAIMER} Data: yfinance (US stocks ~15-min delay), '
+            f'CoinGecko, DexScreener. Not connected to any broker.</div>', unsafe_allow_html=True)

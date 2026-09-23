@@ -1,7 +1,7 @@
 """
-ui/theme.py — Η εμφάνιση "terminal" (σκούρο φόντο, neon μοβ/χρυσά chips,
-monospace γραμματοσειρά, sparkline κάρτες). Όλο το styling είναι εδώ ώστε
-να αλλάζεις χρώματα σε ένα σημείο.
+ui/theme.py — The "terminal" look (dark background, neon violet/gold chips,
+monospace font, sparkline cards). All styling lives here so you can change
+colours in one place.
 """
 import streamlit as st
 
@@ -35,10 +35,10 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stHeader"] {{
 [data-testid="stSidebar"] {{ background: {PALETTE['panel']} !important; border-right: 1px solid {PALETTE['line']}; }}
 * {{ font-family: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace !important; }}
 h1,h2,h3,h4 {{ color: {PALETTE['gold']} !important; letter-spacing: .02em; }}
-.block-container {{ padding-top: 1.0rem; padding-bottom: 2rem; max-width: 1500px; }}
+.block-container {{ padding-top: 3.4rem; padding-bottom: 2rem; max-width: 1500px; }}
 hr {{ border-color: {PALETTE['line']} !important; }}
 
-/* --- κεφαλίδα terminal --- */
+/* --- terminal header --- */
 .ft-head {{ display:flex; justify-content:space-between; align-items:flex-end; gap:12px; flex-wrap:wrap;
             border-bottom:1px solid {PALETTE['line']}; padding-bottom:8px; margin-bottom:8px; }}
 .ft-title {{ font-size:22px; font-weight:800; color:{PALETTE['gold']}; text-shadow:0 0 14px rgba(242,182,50,.45); }}
@@ -56,7 +56,7 @@ hr {{ border-color: {PALETTE['line']} !important; }}
 .ft-chip.gold {{ border-color:{PALETTE['gold']}; box-shadow:0 0 6px rgba(242,182,50,.4); background:rgba(242,182,50,.08); }}
 .ft-chip.active {{ background:{PALETTE['violet']}; color:#000; }}
 
-/* --- κάρτες sparkline --- */
+/* --- sparkline cards --- */
 .ft-card {{ border:1px solid {PALETTE['line']}; border-left:3px solid {PALETTE['gold']}; border-radius:8px;
             padding:6px 8px 0 8px; margin-bottom:6px; background:rgba(11,13,31,.85); }}
 .ft-card.up {{ border-left-color:{PALETTE['green']}; }}

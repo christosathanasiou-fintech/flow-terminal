@@ -1,4 +1,4 @@
-"""End-to-end: τρέχει κάθε module με mocked δεδομένα (χωρίς internet)."""
+"""End-to-end: runs every module with mocked data (no internet needed)."""
 import time
 import numpy as np, pandas as pd
 from streamlit.testing.v1 import AppTest

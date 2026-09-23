@@ -1,24 +1,24 @@
 """
-engine/rotation.py — Μηχανή "ροής κεφαλαίου" (capital rotation).
+engine/rotation.py — Capital-rotation engine.
 
-Ιδέα: δεν βλέπουμε πραγματικές εισροές/εκροές (δεν υπάρχει δωρεάν API), αλλά
-μπορούμε να τις προσεγγίσουμε με τρία σήματα ανά asset:
+Idea: we cannot see actual inflows/outflows (there is no free API), but we can
+approximate them with three signals per asset:
 
-  1. Relative strength (RS): σταθμισμένα z-scores των αποδόσεων 1d/5d/20d/60d
-     σε σχέση με όλο το σύμπαν (cross-sectional). Θετικό = το χρήμα προτιμά
-     αυτό το asset σε σχέση με τα άλλα.
-  2. Flow proxy: dollar volume 5 ημερών / dollar volume 60 ημερών × πρόσημο
-     απόδοσης 5d. Αυξημένος όγκος ΜΕ άνοδο = εισροή, ΜΕ πτώση = εκροή.
-  3. Trend: θέση τιμής ως προς SMA20 & SMA50.
+  1. Relative strength (RS): weighted z-scores of 1d/5d/20d/60d returns
+     relative to the whole universe (cross-sectional). Positive = money
+     prefers this asset over the others.
+  2. Flow proxy: 5-day dollar volume / 60-day dollar volume × sign of the
+     5d return. Rising volume WITH gains = inflow, WITH losses = outflow.
+  3. Trend: price position relative to SMA20 & SMA50.
 
-Σύνθετο score ∈ [-100, +100]. Το πρόσημο δίνει INFLOW / OUTFLOW, το μέγεθος
-την ένταση. Στη συνέχεια ομαδοποιούμε ανά κέντρο αγοράς / κλάδο / κλάση για
-να πούμε "το κεφάλαιο φεύγει από Χ και πάει σε Υ".
+Composite score ∈ [-100, +100]. The sign gives INFLOW / OUTFLOW, the magnitude
+gives intensity. We then aggregate by market centre / sector / asset class to
+say "capital is leaving X and moving into Y".
 
 Upgrade path:
-  - Βάλε πραγματικά ETF flows (π.χ. ETF.com CSV) ως 4ο παράγοντα.
-  - Αντικατέστησε τα σταθερά βάρη με βάρη που εκτιμώνται από cross-sectional
-    regression (Fama-MacBeth) στο ιστορικό — καλό project για το portfolio σου.
+  - Add real ETF flows (e.g. ETF.com CSV) as a 4th factor.
+  - Replace the fixed weights with weights estimated from cross-sectional
+    regressions (Fama-MacBeth) on history — a strong portfolio project.
 """
 from __future__ import annotations
 
@@ -38,8 +38,8 @@ def _zscore(s: pd.Series) -> pd.Series:
 
 def asset_metrics(close: pd.DataFrame, volume: pd.DataFrame | None = None) -> pd.DataFrame:
     """
-    Είσοδος: close (index=ημερομηνία, columns=tickers), volume (προαιρετικό).
-    Έξοδος: DataFrame ανά ticker με last, ret_*, vol_20d, sma20/50, flow_proxy,
+    Input: close (index=date, columns=tickers), volume (optional).
+    Output: DataFrame per ticker with last, ret_*, vol_20d, sma20/50, flow_proxy,
             rs_score, trend_score, flow_score, score, regime.
     """
     if close.empty:
@@ -99,8 +99,8 @@ def asset_metrics(close: pd.DataFrame, volume: pd.DataFrame | None = None) -> pd
 
 def group_rotation(metrics: pd.DataFrame, mapping: dict[str, str]) -> pd.DataFrame:
     """
-    mapping: ticker → όνομα ομάδας (κέντρο/κλάδος/κλάση).
-    Επιστρέφει score ανά ομάδα + ταξινόμηση από εισροή σε εκροή.
+    mapping: ticker → group name (centre/sector/class).
+    Returns the score per group, sorted from inflow to outflow.
     """
     if metrics.empty:
         return pd.DataFrame()
@@ -115,7 +115,7 @@ def group_rotation(metrics: pd.DataFrame, mapping: dict[str, str]) -> pd.DataFra
 
 
 def rotation_story(g: pd.DataFrame, top: int = 3) -> dict:
-    """'Από πού φεύγει και πού πάει το κεφάλαιο' σε δομημένη μορφή."""
+    """'Where capital is leaving and where it is going' in structured form."""
     if g.empty:
         return {"to": [], "from": [], "n_in": 0, "n_out": 0, "n": 0}
     return {
@@ -128,7 +128,7 @@ def rotation_story(g: pd.DataFrame, top: int = 3) -> dict:
 
 
 def breadth(metrics: pd.DataFrame) -> dict:
-    """Πλάτος αγοράς: % assets πάνω από SMA20/50, % με θετικό 5d."""
+    """Market breadth: % of assets above SMA20/50, % with a positive 5d return."""
     if metrics.empty:
         return {}
     return {

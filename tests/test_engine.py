@@ -1,4 +1,4 @@
-"""Offline tests με συνθετικά δεδομένα — τρέξε: python -m pytest tests"""
+"""Offline tests with synthetic data — run: python -m pytest tests"""
 import numpy as np, pandas as pd
 from engine import rotation as R, signals as S, meme as M, data as D
 

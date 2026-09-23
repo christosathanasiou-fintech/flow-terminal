@@ -1,21 +1,21 @@
 """
-engine/signals.py — Παραγωγή "setups" (LONG / SHORT / WAIT) ανά asset.
+engine/signals.py — Generates "setups" (LONG / SHORT / WAIT) per asset.
 
-Κανόνες (rule-based, διαφανείς — όχι μαύρο κουτί):
-  • Trend filter: τιμή vs SMA20/SMA50, SMA20 vs SMA50
-  • Momentum: RSI(14) — αποφεύγουμε LONG σε RSI>75 και SHORT σε RSI<25
-  • Volatility: ATR(14) για stop (2×ATR) και target (3×ATR) → R:R = 1.5
-  • Volume: επιβεβαίωση αν ο όγκος 5d > όγκος 20d
-  • Rotation: το score από το rotation engine (αν δοθεί) προστίθεται στην
-    πεποίθηση (conviction)
+Rules (rule-based and transparent — not a black box):
+  • Trend filter: price vs SMA20/SMA50, SMA20 vs SMA50
+  • Momentum: RSI(14) — avoid LONG at RSI>75 and SHORT at RSI<25
+  • Volatility: ATR(14) for the stop (2×ATR) and target (3×ATR) → R:R = 1.5
+  • Volume: confirmation if 5d volume > 20d volume
+  • Rotation: the score from the rotation engine (if given) is added to the
+    conviction
 
-Έξοδος ανά asset: direction, conviction (0-100), entry, stop, target, rr,
-rsi, atr, rationale (λίστα από σύντομες αιτιολογίες στα ελληνικά).
+Output per asset: direction, conviction (0-100), entry, stop, target, rr,
+rsi, atr, rationale (list of short plain-English reasons).
 
 Upgrade path:
-  - Backtest τους κανόνες με vectorbt/backtrader και βάλε το hit-rate ανά
-    asset class στο UI (αυτό είναι που ξεχωρίζει ένα portfolio project).
-  - Πρόσθεσε multi-timeframe (4h + 1d) πριν δώσεις conviction > 70.
+  - Backtest the rules with vectorbt/backtrader and show the hit-rate per
+    asset class in the UI (this is what makes a portfolio project stand out).
+  - Add multi-timeframe confirmation (4h + 1d) before giving conviction > 70.
 """
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ class Setup:
     rsi: float
     atr: float
     atr_pct: float
-    trend: str                # ΑΝΟΔΙΚΗ / ΚΑΘΟΔΙΚΗ / ΠΛΑΓΙΑ
+    trend: str                # UPTREND / DOWNTREND / SIDEWAYS
     rationale: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict:
@@ -64,7 +64,7 @@ def atr(high: pd.Series, low: pd.Series, close: pd.Series, n: int = 14) -> float
 
 def build_setup(ticker: str, ohlc: pd.DataFrame, rotation_score: float | None = None) -> Setup | None:
     """
-    ohlc: DataFrame με στήλες Open/High/Low/Close/Volume (ημερήσιο, ≥ 30 γραμμές).
+    ohlc: DataFrame with Open/High/Low/Close/Volume columns (daily, ≥ 30 rows).
     """
     ohlc = ohlc.dropna(subset=["Close"])
     if len(ohlc) < 30:
@@ -81,44 +81,44 @@ def build_setup(ticker: str, ohlc: pd.DataFrame, rotation_score: float | None = 
     # --- Trend ------------------------------------------------------------
     pts = (last > sma20) + (last > sma50) + (sma20 > sma50)
     if pts == 3:
-        trend = "ΑΝΟΔΙΚΗ"
+        trend = "UPTREND"
     elif pts == 0:
-        trend = "ΚΑΘΟΔΙΚΗ"
+        trend = "DOWNTREND"
     else:
-        trend = "ΠΛΑΓΙΑ"
+        trend = "SIDEWAYS"
 
     why: list[str] = []
     score = 0
-    if trend == "ΑΝΟΔΙΚΗ":
-        score += 35; why.append("τιμή πάνω από SMA20 & SMA50, SMA20 > SMA50")
-    elif trend == "ΚΑΘΟΔΙΚΗ":
-        score -= 35; why.append("τιμή κάτω από SMA20 & SMA50, SMA20 < SMA50")
+    if trend == "UPTREND":
+        score += 35; why.append("price above SMA20 & SMA50, SMA20 > SMA50")
+    elif trend == "DOWNTREND":
+        score -= 35; why.append("price below SMA20 & SMA50, SMA20 < SMA50")
     else:
-        why.append("μικτή εικόνα κινητών μέσων (πλάγια κίνηση)")
+        why.append("mixed moving-average picture (sideways)")
 
     # --- Momentum ---------------------------------------------------------
     if 50 < r < 70:
-        score += 15; why.append(f"RSI {r:.0f}: υγιής ανοδική ορμή")
+        score += 15; why.append(f"RSI {r:.0f}: healthy upside momentum")
     elif 30 < r <= 50:
-        score -= 15; why.append(f"RSI {r:.0f}: αδύναμη ορμή")
+        score -= 15; why.append(f"RSI {r:.0f}: weak momentum")
     elif r >= 75:
-        score -= 10; why.append(f"RSI {r:.0f}: υπεραγορασμένο — κίνδυνος chase")
+        score -= 10; why.append(f"RSI {r:.0f}: overbought — chase risk")
     elif r <= 25:
-        score += 10; why.append(f"RSI {r:.0f}: υπερπουλημένο — πιθανό bounce")
+        score += 10; why.append(f"RSI {r:.0f}: oversold — possible bounce")
 
     # --- Volume -----------------------------------------------------------
     if vol_ok is True:
-        score += 10 * (1 if score >= 0 else -1); why.append("όγκος 5d > όγκος 20d (επιβεβαίωση)")
+        score += 10 * (1 if score >= 0 else -1); why.append("5d volume > 20d volume (confirmation)")
     elif vol_ok is False:
-        why.append("όγκος χαμηλότερος του μέσου — χωρίς επιβεβαίωση")
+        why.append("volume below average — no confirmation")
 
     # --- Rotation ---------------------------------------------------------
     if rotation_score is not None and not np.isnan(rotation_score):
         score += float(rotation_score) * 0.3
         why.append(f"rotation score {rotation_score:+.0f} "
-                   f"({'εισροή' if rotation_score > 0 else 'εκροή'} κεφαλαίου)")
+                   f"(capital {'inflow' if rotation_score > 0 else 'outflow'})")
 
-    # --- Απόφαση ----------------------------------------------------------
+    # --- Decision ---------------------------------------------------------
     conviction = int(min(100, abs(score)))
     if score >= 25:
         direction, stop, target = "LONG", last - 2 * a, last + 3 * a
@@ -126,7 +126,7 @@ def build_setup(ticker: str, ohlc: pd.DataFrame, rotation_score: float | None = 
         direction, stop, target = "SHORT", last + 2 * a, last - 3 * a
     else:
         direction, stop, target = "WAIT", last - 2 * a, last + 3 * a
-        why.append("δεν υπάρχει καθαρό edge — περίμενε επιβεβαίωση")
+        why.append("no clear edge — wait for confirmation")
 
     return Setup(ticker=ticker, direction=direction, conviction=conviction,
                  entry=round(last, 4), stop=round(stop, 4), target=round(target, 4),

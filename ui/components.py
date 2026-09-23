@@ -1,5 +1,5 @@
 """
-ui/components.py — Επαναχρησιμοποιήσιμα κομμάτια οθόνης (Plotly + HTML).
+ui/components.py — Reusable screen building blocks (Plotly + HTML).
 """
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ def panel(label: str, body: str, style: str = "gold") -> None:
 
 
 def tape(items: list[tuple[str, float, float]]) -> None:
-    """items: [(label, last, chg_pct)] — κυλιόμενη ταινία τιμών."""
+    """items: [(label, last, chg_pct)] — scrolling ticker tape."""
     if not items:
         return
     parts = []
@@ -84,7 +84,7 @@ def card_grid(rows: list[dict], cols: int = 5, key_prefix: str = "g") -> None:
 
 # --------------------------------------------------------------------------- #
 def price_chart(ohlc: pd.DataFrame, title: str, setup=None) -> go.Figure:
-    """Candlestick + SMA20/50 + επίπεδα entry/stop/target."""
+    """Candlestick + SMA20/50 + entry/stop/target levels."""
     fig = go.Figure()
     fig.add_trace(go.Candlestick(x=ohlc.index, open=ohlc["Open"], high=ohlc["High"],
                                  low=ohlc["Low"], close=ohlc["Close"], name=title,
@@ -107,8 +107,8 @@ def price_chart(ohlc: pd.DataFrame, title: str, setup=None) -> go.Figure:
 
 def globe(centers: pd.DataFrame) -> go.Figure:
     """
-    centers: index=ticker, στήλες name, lat, lon, score, regime, ret_5d.
-    3D υδρόγειος (ορθογραφική προβολή) — μέγεθος/χρώμα = ροή κεφαλαίου.
+    centers: index=ticker, columns name, lat, lon, score, regime, ret_5d.
+    3D globe (orthographic projection) — marker size/colour = capital flow.
     """
     if centers.empty:
         return go.Figure()
@@ -122,7 +122,7 @@ def globe(centers: pd.DataFrame) -> go.Figure:
         lat=centers["lat"], lon=centers["lon"], text=txt, hovertext=hover, hoverinfo="text",
         mode="markers+text", textposition="top center", textfont=dict(size=9, color=P["text"]),
         marker=dict(size=size, color=col, opacity=.9, line=dict(width=1, color="#fff"))))
-    # τόξα ροής: από τα 3 χειρότερα προς τα 3 καλύτερα
+    # flow arcs: from the 3 weakest centres to the 3 strongest
     srt = centers.sort_values("score")
     for _, a in srt.head(3).iterrows():
         for _, b in srt.tail(3).iterrows():
@@ -150,7 +150,7 @@ def rotation_bars(g: pd.DataFrame, title: str) -> go.Figure:
 
 
 def rotation_block(container, g: pd.DataFrame, title: str, key: str) -> None:
-    """Τίτλος ως HTML label ΠΑΝΩ από το γράφημα (ο Plotly title κοβόταν)."""
+    """Title as an HTML label ABOVE the chart (the Plotly title was getting clipped)."""
     container.markdown(f'<div class="ft-label">{html.escape(title)}</div>', unsafe_allow_html=True)
     container.plotly_chart(rotation_bars(g, title), width="stretch", key=key, config={"displayModeBar": False})
 

@@ -1,7 +1,7 @@
 @echo off
 cd /d %~dp0
 if not exist .venv (
-  echo Πρωτη εκκινηση: δημιουργια περιβαλλοντος και εγκατασταση βιβλιοθηκων...
+  echo First launch: creating the environment and installing libraries, this takes 2-4 minutes...
   python -m venv .venv
   .venv\Scripts\python.exe -m pip install -r requirements.txt
 )

@@ -1,15 +1,15 @@
 """
-engine/narrative.py — "ΜΕ ΑΠΛΑ ΛΟΓΙΑ": μετατροπή αριθμών σε κείμενο.
+engine/narrative.py — "IN PLAIN WORDS": turns numbers into readable text.
 
-Δύο επίπεδα:
-  1. Rule-based (πάντα διαθέσιμο, δωρεάν): συνθέτει προτάσεις από τα metrics.
-  2. LLM (προαιρετικό): αν υπάρχει ANTHROPIC_API_KEY στο περιβάλλον ή στα
-     Streamlit secrets, η εντολή ASK στέλνει το snapshot της αγοράς στο Claude
-     και επιστρέφει απάντηση. Χωρίς κλειδί, το ASK απαντά με το rule-based.
+Two layers:
+  1. Rule-based (always available, free): composes sentences from the metrics.
+  2. LLM (optional): if ANTHROPIC_API_KEY is set in the environment or in
+     Streamlit secrets, the ASK command sends the market snapshot to Claude
+     and returns its answer. Without a key, ASK falls back to the rule-based text.
 
 Upgrade path:
-  - Δώσε στο LLM tools (function calling) ώστε να ζητά το ίδιο ιστορικό
-    για συγκεκριμένο ticker αντί να παίρνει μόνο το snapshot.
+  - Give the LLM tools (function calling) so it can request the history of a
+    specific ticker itself instead of only receiving the snapshot.
 """
 from __future__ import annotations
 
@@ -18,8 +18,8 @@ import os
 
 import pandas as pd
 
-DISCLAIMER = ("Ενημερωτικοί σκοποί μόνο. Δεν αποτελεί επενδυτική συμβουλή. "
-              "Η τελική απόφαση είναι αποκλειστικά δική σου.")
+DISCLAIMER = ("For informational purposes only. Not investment advice. "
+              "The final decision is entirely yours.")
 
 
 def fmt_pct(x) -> str:
@@ -29,88 +29,93 @@ def fmt_pct(x) -> str:
         return "n/a"
 
 
-def rotation_text(story: dict, breadth: dict, label: str = "κέντρα") -> str:
+def rotation_text(story: dict, breadth: dict, label: str = "centres") -> str:
+    """Summary of where capital is flowing, plus a breadth read."""
     if not story or not story.get("to"):
-        return "Δεν υπάρχουν αρκετά δεδομένα για την ανάλυση ροής."
+        return "Not enough data for the flow analysis."
     to = ", ".join(f"{n} ({s:+.0f})" for n, s in story["to"])
     frm = ", ".join(f"{n} ({s:+.0f})" for n, s in story["from"])
     parts = [
-        f"Το κεφάλαιο ΠΑΕΙ προς: {to}.",
-        f"Το κεφάλαιο ΦΕΥΓΕΙ από: {frm}.",
-        f"{story['n_in']}/{story['n']} {label} σε εισροή, {story['n_out']}/{story['n']} σε εκροή.",
+        f"Capital is MOVING INTO: {to}.",
+        f"Capital is LEAVING: {frm}.",
+        f"{story['n_in']}/{story['n']} {label} in inflow, {story['n_out']}/{story['n']} in outflow.",
     ]
     if breadth:
         b = breadth
-        mood = ("ευρεία ανοδική συμμετοχή" if b["pct_above_sma50"] >= 65 else
-                "ευρεία αδυναμία" if b["pct_above_sma50"] <= 35 else "επιλεκτική αγορά")
-        parts.append(f"Πλάτος: {b['pct_above_sma50']:.0f}% πάνω από SMA50, "
-                     f"{b['pct_pos_5d']:.0f}% θετικά στο 5ήμερο → {mood}.")
+        mood = ("broad participation to the upside" if b["pct_above_sma50"] >= 65 else
+                "broad weakness" if b["pct_above_sma50"] <= 35 else "selective market")
+        parts.append(f"Breadth: {b['pct_above_sma50']:.0f}% above SMA50, "
+                     f"{b['pct_pos_5d']:.0f}% positive over 5 days → {mood}.")
     return " ".join(parts)
 
 
 def asset_text(ticker: str, name: str, m: pd.Series, setup=None) -> str:
-    """Μία παράγραφος για ένα asset (εντολή DES / VER)."""
-    s = (f"{name} ({ticker}) στα {m['last']:,.2f}: {fmt_pct(m['ret_1d'])} σήμερα, "
-         f"{fmt_pct(m['ret_5d'])} 5ήμερο, {fmt_pct(m['ret_20d'])} μήνα, "
-         f"{fmt_pct(m['ret_60d'])} τρίμηνο. Μεταβλητότητα {m['vol_20d']:.0f}% ετησ. ")
-    s += (f"Rotation score {m['score']:+.0f} → {m['regime']}. ")
+    """One paragraph for a single asset (DES / VER commands)."""
+    s = (f"{name} ({ticker}) at {m['last']:,.2f}: {fmt_pct(m['ret_1d'])} today, "
+         f"{fmt_pct(m['ret_5d'])} over 5 days, {fmt_pct(m['ret_20d'])} over a month, "
+         f"{fmt_pct(m['ret_60d'])} over 3 months. Volatility {m['vol_20d']:.0f}% annualised. ")
+    s += f"Rotation score {m['score']:+.0f} → {m['regime']}. "
     if setup is not None:
-        s += (f"Setup: {setup.direction} με conviction {setup.conviction}/100, "
-              f"τάση {setup.trend}, RSI {setup.rsi:.0f}. "
-              f"Είσοδος ~{setup.entry:,.2f}, stop {setup.stop:,.2f}, "
+        s += (f"Setup: {setup.direction} with conviction {setup.conviction}/100, "
+              f"trend {setup.trend}, RSI {setup.rsi:.0f}. "
+              f"Entry ~{setup.entry:,.2f}, stop {setup.stop:,.2f}, "
               f"target {setup.target:,.2f} (R:R {setup.rr}). "
-              f"Γιατί: {'; '.join(setup.rationale)}.")
+              f"Why: {'; '.join(setup.rationale)}.")
     return s
 
 
 def commodities_text(m: pd.DataFrame, names: dict[str, str]) -> str:
     if m.empty:
-        return "Χωρίς δεδομένα εμπορευμάτων."
-    up = m[m["ret_1d"] > 0]; dn = m[m["ret_1d"] <= 0]
-    best = m["ret_5d"].idxmax(); worst = m["ret_5d"].idxmin()
-    return (f"Στα {len(m)} εμπορεύματα, {len(up)} ανεβαίνουν και {len(dn)} πέφτουν σήμερα. "
-            f"Ισχυρότερο 5ημέρου: {names.get(best, best)} {fmt_pct(m.loc[best, 'ret_5d'])}. "
-            f"Αδύναμο: {names.get(worst, worst)} {fmt_pct(m.loc[worst, 'ret_5d'])}. "
-            f"Εισροή: {', '.join(names.get(t, t) for t in m[m.regime == 'INFLOW'].index[:4]) or '—'}. "
-            f"Εκροή: {', '.join(names.get(t, t) for t in m[m.regime == 'OUTFLOW'].index[:4]) or '—'}.")
+        return "No commodity data."
+    up = m[m["ret_1d"] > 0]
+    dn = m[m["ret_1d"] <= 0]
+    best = m["ret_5d"].idxmax()
+    worst = m["ret_5d"].idxmin()
+    return (f"Of {len(m)} commodities, {len(up)} are up and {len(dn)} are down today. "
+            f"Strongest over 5 days: {names.get(best, best)} {fmt_pct(m.loc[best, 'ret_5d'])}. "
+            f"Weakest: {names.get(worst, worst)} {fmt_pct(m.loc[worst, 'ret_5d'])}. "
+            f"Inflow: {', '.join(names.get(t, t) for t in m[m.regime == 'INFLOW'].index[:4]) or '—'}. "
+            f"Outflow: {', '.join(names.get(t, t) for t in m[m.regime == 'OUTFLOW'].index[:4]) or '—'}.")
 
 
 def crypto_text(cg: pd.DataFrame, glob: dict) -> str:
     if cg.empty:
-        return "Χωρίς δεδομένα crypto (CoinGecko rate limit; ξαναδοκίμασε σε 1')."
+        return "No crypto data (CoinGecko rate limit; try again in 1 minute)."
     top = cg.head(20)
     s = ""
     if glob.get("total_mcap_usd"):
-        s += (f"Συνολική κεφαλαιοποίηση ${glob['total_mcap_usd']/1e12:.2f}T "
+        s += (f"Total market cap ${glob['total_mcap_usd']/1e12:.2f}T "
               f"({fmt_pct(glob.get('mcap_chg_24h'))} 24h), BTC dominance "
               f"{glob.get('btc_dominance', 0):.1f}%. ")
     btc = cg[cg.symbol == "BTC"]
     alts = top[~top.symbol.isin(["BTC", "USDT", "USDC"])]
     if not btc.empty and not alts.empty:
         d = float(alts.chg_7d.mean() - btc.chg_7d.iloc[0])
-        s += (f"Alts 7d vs BTC: {d:+.1f} μον. → "
-              f"{'κεφάλαιο ρέει προς alts' if d > 2 else 'BTC κρατά το κεφάλαιο' if d < -2 else 'ισορροπία'}. ")
-    w = top.loc[top.chg_24h.idxmax()]; l = top.loc[top.chg_24h.idxmin()]
-    s += f"Top-20 24h: καλύτερο {w.symbol} {fmt_pct(w.chg_24h)}, χειρότερο {l.symbol} {fmt_pct(l.chg_24h)}."
+        s += (f"Alts 7d vs BTC: {d:+.1f} pts → "
+              f"{'capital rotating into alts' if d > 2 else 'BTC is holding the capital' if d < -2 else 'balanced'}. ")
+    w = top.loc[top.chg_24h.idxmax()]
+    lo = top.loc[top.chg_24h.idxmin()]
+    s += f"Top-20 over 24h: best {w.symbol} {fmt_pct(w.chg_24h)}, worst {lo.symbol} {fmt_pct(lo.chg_24h)}."
     return s
 
 
 def meme_text(df: pd.DataFrame) -> str:
     if df.empty:
-        return "Το radar δεν βρήκε tokens που περνούν τα φίλτρα αυτή τη στιγμή."
-    a = df[df.grade == "A"]; b = df[df.grade == "B"]
-    s = (f"Σαρώθηκαν {len(df)} νέα tokens: {len(a)} grade A, {len(b)} grade B. ")
+        return "The radar found no tokens that pass the filters right now."
+    a = df[df.grade == "A"]
+    b = df[df.grade == "B"]
+    s = f"Scanned {len(df)} new tokens: {len(a)} grade A, {len(b)} grade B. "
     if not a.empty:
-        s += "Ξεχωρίζουν: " + ", ".join(
-            f"{r.symbol} ({r.chain}, score {r.score}, liq ${r.liq/1e3:.0f}k, {r.age_h or 0:.0f}h)"
+        s += "Standouts: " + ", ".join(
+            f"{r.symbol} ({r.chain}, score {r.score}, liq ${r.liq/1e3:.0f}k, {r.age_h or 0:.0f}h old)"
             for r in a.head(3).itertuples()) + ". "
-    s += ("Υπενθύμιση: το score μετρά δραστηριότητα και red flags, όχι μελλοντική απόδοση· "
-          "τα περισσότερα meme coins πάνε στο μηδέν.")
+    s += ("Reminder: the score measures activity and red flags, not future returns; "
+          "most meme coins go to zero.")
     return s
 
 
 # --------------------------------------------------------------------------- #
-# LLM (προαιρετικό)
+# LLM (optional)
 # --------------------------------------------------------------------------- #
 def _api_key() -> str | None:
     k = os.environ.get("ANTHROPIC_API_KEY")
@@ -124,24 +129,24 @@ def _api_key() -> str | None:
 
 
 def ask_llm(question: str, snapshot: dict) -> str:
-    """Στέλνει ερώτηση + snapshot αγοράς στο Claude. Fallback χωρίς κλειδί."""
+    """Sends the question + market snapshot to Claude. Falls back without a key."""
     key = _api_key()
     if not key:
-        return ("Δεν έχει οριστεί ANTHROPIC_API_KEY, οπότε απαντώ μόνο με τους κανόνες "
-                "του terminal. Βάλε το κλειδί στο .streamlit/secrets.toml για πλήρες ASK.")
+        return ("No ANTHROPIC_API_KEY is set, so I can only answer with the terminal's "
+                "rules. Add the key to .streamlit/secrets.toml to enable full ASK.")
     try:
         import anthropic
         client = anthropic.Anthropic(api_key=key)
         model = os.environ.get("FLOW_LLM_MODEL", "claude-sonnet-4-6")
-        sys = ("Είσαι ο αναλυτής του FLOW TERMINAL. Απαντάς στα ελληνικά, σύντομα, με "
-               "συγκεκριμένα επίπεδα και αριθμούς από το snapshot. Κρατάς τους τεχνικούς "
-               "όρους (RSI, ATR, drawdown) στα αγγλικά. Ξεκαθαρίζεις τι είναι γεγονός, τι "
-               "εκτίμηση. Δεν δίνεις εξατομικευμένη επενδυτική συμβουλή· περιγράφεις σενάρια.")
+        sys = ("You are the analyst of FLOW TERMINAL. Answer in English, concisely, with "
+               "specific levels and numbers taken from the snapshot. Keep technical terms "
+               "(RSI, ATR, drawdown) as they are. Make clear what is fact and what is "
+               "estimate. Do not give personalised investment advice; describe scenarios.")
         msg = client.messages.create(
             model=model, max_tokens=800, system=sys,
             messages=[{"role": "user", "content":
                        f"SNAPSHOT (JSON):\n{json.dumps(snapshot, ensure_ascii=False, default=str)[:12000]}"
-                       f"\n\nΕΡΩΤΗΣΗ: {question}"}])
+                       f"\n\nQUESTION: {question}"}])
         return "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
     except Exception as e:  # noqa: BLE001
-        return f"Σφάλμα LLM: {e}"
+        return f"LLM error: {e}"

@@ -1,128 +1,142 @@
 # FLOW TERMINAL 🌐
 
-Terminal-style dashboard που παρακολουθεί ζωντανά μετοχές, εμπορεύματα, crypto και
-νέα meme tokens, υπολογίζει **πού ρέει το κεφάλαιο** και βγάζει **setups**
-(LONG / SHORT / WAIT με entry, stop, target). Ενημερωτικοί σκοποί μόνο — δεν
-συνδέεται με broker, δεν εκτελεί εντολές.
+A terminal-style dashboard that tracks stocks, commodities, crypto and newly launched
+meme tokens, estimates **where capital is flowing**, and generates **setups**
+(LONG / SHORT / WAIT with entry, stop and target).
 
-## Τι κάνει
+**For informational purposes only.** It is not connected to any broker and places no orders.
 
-| Module | Τι δείχνει | Πηγή |
+## What it does
+
+| Module | What it shows | Source |
 |---|---|---|
-| 1 ΠΡΩΙΝΟ | Ροή κεφαλαίου ανά κλάση / κλάδο / κέντρο, 3 καλύτερα setups, trending | yfinance, CoinGecko |
-| 2 CHART | Candlestick + SMA20/50 + entry/stop/target για οποιοδήποτε asset (`GIP GOLD`) | yfinance |
-| 3 ΥΔΡΟΓΕΙΟΣ | 3D υδρόγειος: 18 χρηματιστηριακά κέντρα, χρώμα = εισροή/εκροή, τόξα ροής | yfinance (country ETFs) |
-| 4 SETUPS | Πίνακας LONG/SHORT/WAIT σε 60+ assets με conviction & αιτιολογία | yfinance |
-| 5 ΕΤΑΙΡΕΙΕΣ | Watchlist μετοχών με sparklines, προσθέτεις δικά σου tickers | yfinance |
-| 6 ΕΜΠΟΡΕΥΜΑΤΑ | 20 εμπορεύματα (μέταλλα, ενέργεια, αγροτικά) με sparklines + ροή | yfinance futures |
-| 7 CRYPTO | Top-100, BTC dominance, ροή μέσα στα crypto | CoinGecko |
-| 8 MEME RADAR | Νέα tokens (Solana/Base/ETH/BSC) με score δικτύου & security flags | DexScreener, RugCheck, GoPlus |
-| 9 FX & RATES | Δείκτες, DXY, EUR/USD, US10Y, VIX | yfinance |
-| ASK | Ερώτηση ελεύθερου κειμένου με snapshot αγοράς (προαιρετικά Claude API) | — |
+| 1 BRIEF | Capital flow by asset class / sector / market centre, the 3 cleanest setups, trending coins | yfinance, CoinGecko |
+| 2 CHART | Candlestick + SMA20/50 + entry/stop/target for any asset (`GIP GOLD`) | yfinance |
+| 3 GLOBE | 3D globe of 18 financial centres; colour = inflow/outflow, arcs = rotation | yfinance (country ETFs) |
+| 4 SETUPS | LONG/SHORT/WAIT table across 60+ assets with conviction and rationale | yfinance |
+| 5 STOCKS | Stock watchlist with sparklines; add your own tickers | yfinance |
+| 6 COMMODITIES | 20 commodities (metals, energy, agriculture) with sparklines + flow | yfinance futures |
+| 7 CRYPTO | Top 100, BTC dominance, flow within crypto | CoinGecko |
+| 8 MEME RADAR | New tokens (Solana/Base/ETH/BSC) with a network score and security flags | DexScreener, RugCheck, GoPlus |
+| 9 FX & RATES | Indices, DXY, EUR/USD, US10Y, VIX | yfinance |
+| ASK | Free-text question answered from a market snapshot (optionally via the Claude API) | — |
 
-**Εντολές** (command bar πάνω-πάνω, στυλ Bloomberg):
-`GIP GOLD` · `DES US30` · `SET OIL` · `VER DAX` · `GIP NVDA` · `GIP BTC` · `MEME WIF` · `ASK τι αγοράζω;`
+**Commands** (the command bar at the top, Bloomberg-style):
+`GIP GOLD` · `DES US30` · `SET OIL` · `VER DAX` · `GIP NVDA` · `GIP BTC` · `MEME WIF` · `ASK what should I watch today?`
 
-## Πώς βγαίνουν τα σήματα (διαφανές, όχι μαύρο κουτί)
+## How to read the screen
 
-- **Ροή κεφαλαίου** = 0.5 × relative strength (z-scores αποδόσεων 1d/5d/20d/60d
-  cross-sectional) + 0.3 × trend (τιμή vs SMA20/50) + 0.2 × flow proxy
-  (dollar volume 5d / 60d × πρόσημο 5d). Score ∈ [-100, 100]. `engine/rotation.py`
-- **Setup** = trend filter + RSI(14) + επιβεβαίωση όγκου + rotation score.
-  Stop = 2×ATR(14), target = 3×ATR → R:R 1.5. `engine/signals.py`
-- **Meme score** (0-100) = ρευστότητα + όγκος/ρευστότητα + πίεση αγορών + ορμή +
-  ηλικία + socials/boosts − ποινές security (honeypot = 0). `engine/meme.py`
+**Flow bars (BRIEF, COMMODITIES).** Every asset gets a score from −100 to +100:
 
-Όρια που πρέπει να ξέρεις:
-- yfinance: US μετοχές ~15' καθυστέρηση, futures/FX σχεδόν real-time, crypto real-time.
-- Δεν υπάρχει δωρεάν API πραγματικών ETF flows — το FLOW είναι proxy.
-- Το meme score φιλτράρει σκουπίδια· **δεν** προβλέπει ποιο θα ανέβει.
-- CoinGecko δωρεάν: ~30 requests/λεπτό. Αν δεις κενό, περίμενε 1'.
+| Component | Weight | What it measures |
+|---|---|---|
+| Relative strength | 50% | 1d/5d/20d/60d returns **relative to every other asset** in the group (cross-sectional z-scores) |
+| Trend | 30% | Price above/below SMA20 and SMA50, and SMA20 vs SMA50 |
+| Flow proxy | 20% | 5-day dollar volume / 60-day average, signed by the 5-day return |
+
+- **Green bar, positive number** = inflow. Money is favouring this asset over the rest.
+- **Red bar, negative number** = outflow.
+- Above +25 = INFLOW, below −25 = OUTFLOW, in between = NEUTRAL.
+- It is a **relative** ranking: in a market where everything falls, the "best" asset may
+  just be falling less. Check the breadth line in the "IN PLAIN WORDS" panel.
+
+**Setups.** Trend (±35) + RSI(14) (±15) + volume confirmation (±10) + rotation score × 0.3.
+Above +25 → LONG, below −25 → SHORT, otherwise WAIT. Conviction is the absolute value.
+Stop = 2×ATR(14), target = 3×ATR → R:R 1.5. ATR% shows how volatile the asset is.
+
+**Meme score (0–100).** Liquidity (20) + volume/liquidity (15) + buy pressure (20) + momentum (15)
++ age (10) + website/socials/boosts (10), minus security penalties. A honeypot scores 0.
+Grade A ≥ 75. The score says "real activity, few red flags", **not** "it will go up".
+
+Code: `engine/rotation.py`, `engine/signals.py`, `engine/meme.py`.
+
+## Data freshness
+
+| Data | Refresh in the app | Delay at the source |
+|---|---|---|
+| Daily history (bars, setups, cards) | every 5 min | futures/FX < 1 min, US stocks ~15 min |
+| Crypto | every 2 min | real-time |
+| Meme radar | every 3 min or the "NEW SCAN" button | real-time |
+
+There is no free API for real ETF flows, so FLOW is a proxy. CoinGecko's free tier allows
+~30 requests/minute; if you see an empty panel, wait a minute.
 
 ---
 
-## Α. Εγκατάσταση στα Windows (10 λεπτά)
+## A. Run it on Windows
 
-1. **Python 3.11 ή 3.12** → https://www.python.org/downloads/windows/
-   Στο installer τσέκαρε **"Add python.exe to PATH"**.
-2. **Git** → https://git-scm.com/download/win (όλα default).
-3. Αποσυμπίεσε το `flow-terminal.zip` π.χ. στο `C:\Users\Chris\flow-terminal`.
-4. Άνοιξε PowerShell **μέσα στον φάκελο** (Shift + δεξί κλικ → "Open PowerShell here"):
-   ```powershell
-   python -m venv .venv
-   .\.venv\Scripts\Activate.ps1
-   pip install -r requirements.txt
-   python -m streamlit run app.py
-   ```
-   Αν το PowerShell αρνηθεί το Activate: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` και ξανά.
-5. Ανοίγει στο `http://localhost:8501`. Την επόμενη φορά: διπλό κλικ στο `run.bat`.
+1. Install **Python 3.12** from https://www.python.org/downloads/windows/ and tick
+   **"Add python.exe to PATH"** in the installer.
+2. Unzip `flow-terminal-en.zip`. Open the folder that directly contains `app.py`.
+3. Double-click **`run.bat`**. The first launch creates a virtual environment and installs
+   the libraries (2–4 minutes), then opens `http://localhost:8501` in your browser.
+   Later launches take about 10 seconds. Close the black window to stop the app.
 
-Γνωστά: `streamlit` not recognized → πάντα `python -m streamlit run app.py`.
-"File does not exist" → είσαι σε λάθος φάκελο (`cd` στον φάκελο του app.py).
+Manual alternative (PowerShell in the project folder):
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python -m streamlit run app.py
+```
+- `streamlit is not recognized` → always use `python -m streamlit run app.py`.
+- `File does not exist: app.py` → you are in the wrong folder; `cd` into the one with `app.py`.
+- `running scripts is disabled` → `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
 
-Προαιρετικό ASK με LLM: αντίγραψε `.streamlit/secrets.toml.example` →
-`.streamlit/secrets.toml` και βάλε το `ANTHROPIC_API_KEY`. Χωρίς κλειδί το ASK
-απαντά με τους κανόνες του terminal.
+Optional LLM for ASK: copy `.streamlit/secrets.toml.example` to `.streamlit/secrets.toml`
+and add your `ANTHROPIC_API_KEY`. Without a key, ASK answers from the terminal's rules.
 
-Tests (χωρίς internet): `pip install pytest` → `python -m pytest tests`
+Offline tests: `pip install pytest` then `python -m pytest tests`.
 
-## Β. Ανέβασμα στο GitHub
+## B. Push to GitHub
 
-1. Φτιάξε νέο repo στο github.com → **New** → όνομα `flow-terminal`, Public, **χωρίς** README.
-2. Στο PowerShell, μέσα στον φάκελο:
+1. On github.com: **+** → **New repository** → name `flow-terminal` → Public → **no** README → Create.
+2. In PowerShell, inside the project folder (replace `YOUR_USERNAME`):
    ```powershell
    git init
    git add .
-   git commit -m "FLOW TERMINAL: capital rotation + setups + meme radar"
+   git commit -m "FLOW TERMINAL"
    git branch -M main
-   git remote add origin https://github.com/<το-username-σου>/flow-terminal.git
+   git remote add origin https://github.com/YOUR_USERNAME/flow-terminal.git
    git push -u origin main
    ```
-   Το `.gitignore` κρατά έξω το `secrets.toml` — **ποτέ** μην ανεβάσεις API key.
-3. Στο README του repo βάλε screenshot και 3 γραμμές "τι κάνει" — αυτό βλέπει ο recruiter.
+   `.gitignore` keeps `.venv` and `secrets.toml` out. Never commit an API key.
 
-## Γ. Να γίνει app (web + κινητό) — Streamlit Community Cloud, δωρεάν
+## C. Deploy as an app (Streamlit Community Cloud, free)
 
-1. https://share.streamlit.io → Sign in with GitHub.
-2. **Create app** → repo `flow-terminal`, branch `main`, main file `app.py` → Deploy.
-3. (Προαιρετικό) App settings → **Secrets** → επικόλλησε `ANTHROPIC_API_KEY = "..."`.
-4. Σε ~3' έχεις URL τύπου `https://<user>-flow-terminal.streamlit.app`.
-5. **Στο iPhone**: άνοιξε το URL στο Safari → Share → **Add to Home Screen**.
-   Ανοίγει full-screen σαν κανονικό app, με εικονίδιο. Στο Android: Chrome → ⋮ → Add to Home screen.
-6. Κάθε `git push` κάνει αυτόματο redeploy.
+1. https://share.streamlit.io → **Continue with GitHub**.
+2. **Create app** → repo `flow-terminal`, branch `main`, main file `app.py` → **Deploy**.
+3. Optional: App settings → **Secrets** → paste `ANTHROPIC_API_KEY = "..."`.
+4. After 2–4 minutes you get a URL like `https://YOUR_USERNAME-flow-terminal.streamlit.app`.
+5. iPhone: open it in Safari → Share → **Add to Home Screen**.
+   Windows: Chrome → ⋮ → Cast, save and share → **Install page as app**.
+6. Every `git push` redeploys automatically.
 
-Σημείωση: το δωρεάν tier "κοιμάται" μετά από αδράνεια· το πρώτο άνοιγμα παίρνει
-~30''. Αν το θες πάντα ξύπνιο: Render.com (free) ή Railway ($5/μήνα) με
-`web: python -m streamlit run app.py --server.port $PORT`.
-
-Native Windows .exe (αν το θες κάποια στιγμή): `pip install pyinstaller` και
-πακετάρεις το `run.bat`· δεν αξίζει για web dashboard — το PWA (βήμα 5) είναι
-πιο καθαρό.
+The free tier sleeps after inactivity; the first open then takes ~30 seconds.
 
 ---
 
-## Δομή
+## Structure
 
 ```
-app.py                  UI + command bar + modules
+app.py                  UI, command bar, modules
 engine/data.py          fetchers (yfinance, CoinGecko, DexScreener, GoPlus, RugCheck) + universe
-engine/rotation.py      ροή κεφαλαίου
-engine/signals.py       setups
+engine/rotation.py      capital-rotation engine
+engine/signals.py       setup generator
 engine/meme.py          meme radar
-engine/narrative.py     "με απλά λόγια" + LLM
-ui/theme.py             CSS terminal
-ui/components.py        κάρτες, υδρόγειος, chart, tape
-tests/                  offline tests με mocked δεδομένα
+engine/narrative.py     "in plain words" text + optional LLM
+ui/theme.py             terminal CSS
+ui/components.py        cards, globe, chart, ticker tape
+tests/                  offline tests with mocked data
 .streamlit/config.toml  dark theme
-run.bat                 εκκίνηση με διπλό κλικ
+run.bat                 one-click launcher for Windows
 ```
 
-## Upgrade path (για το portfolio)
+## Upgrade path
 
-1. **Backtest των setups**: κράτα ιστορικό σημάτων σε SQLite, μέτρα hit-rate και
-   expectancy ανά asset class. Αυτό μετατρέπει το dashboard σε research.
-2. **Πραγματικά flows**: ETF.com / SEC 13F ως 4ος παράγοντας στο rotation.
-3. **Meme radar validation**: αποθήκευε κάθε σάρωση και μέτρα forward return
-   24h/72h ανά grade — απόδειξε ή διάψευσε ότι το score έχει edge.
-4. **Real-time US μετοχές**: Alpaca/Polygon websocket αντί yfinance.
-5. **LLM με tools**: δώσε στο ASK function-calling για να τραβά ιστορικό μόνο του.
+1. **Backtest the setups**: log every signal to SQLite and measure hit-rate and expectancy
+   per asset class. This turns the dashboard into research.
+2. **Real flows**: add ETF.com creations/redemptions or SEC 13F data as a 4th rotation factor.
+3. **Validate the meme radar**: store every scan and measure the 24h/72h forward return per grade.
+4. **Real-time US equities**: an Alpaca or Polygon websocket instead of yfinance.
+5. **LLM with tools**: give ASK function calling so it can pull history on its own.
