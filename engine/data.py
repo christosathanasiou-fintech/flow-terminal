@@ -102,7 +102,7 @@ REGIONS: list[Asset] = [
 # --- Asset classes for capital-rotation analysis ---------------------------
 ASSET_CLASSES: list[Asset] = [
     Asset("SPY", "US EQUITIES", "US EQ", "CLASSES", "equity"),
-    Asset("QQQ", "TECHNOLOGY", "TECH", "CLASSES", "equity"),
+    Asset("QQQ", "NASDAQ 100 (ETF)", "QQQ", "CLASSES", "equity"),
     Asset("IWM", "SMALL CAPS", "SMALL", "CLASSES", "equity"),
     Asset("EFA", "DEVELOPED ex-US", "DM", "CLASSES", "equity"),
     Asset("EEM", "EMERGING MKTS", "EM", "CLASSES", "equity"),
